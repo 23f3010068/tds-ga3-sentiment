@@ -1,8 +1,10 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from openai import OpenAI
+from typing import Literal
+import google.generativeai as genai
 import os
+import json
 
 app = FastAPI()
 
@@ -13,30 +15,33 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-client = OpenAI(
-    api_key=os.environ.get("AIPROXY_TOKEN"),
-    base_url="https://aiproxy.sanand.workers.dev/openai/v1"
-)
+genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
 
 class Comment(BaseModel):
     comment: str
 
 class SentimentResponse(BaseModel):
-    sentiment: str
+    sentiment: Literal["positive", "negative", "neutral"]
     rating: int
 
 @app.post("/comment")
 def analyze_comment(body: Comment):
     try:
-        response = client.beta.chat.completions.parse(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": "Analyze the sentiment of the comment. Return sentiment as exactly 'positive', 'negative', or 'neutral'. Return rating as integer 1-5 (5=most positive, 1=most negative)."},
-                {"role": "user", "content": body.comment}
-            ],
-            response_format=SentimentResponse,
+        model = genai.GenerativeModel(
+            model_name="gemini-1.5-flash",
+            generation_config=genai.types.GenerationConfig(
+                response_mime_type="application/json",
+                response_schema=SentimentResponse,
+            )
         )
-        result = response.choices[0].message.parsed
-        return {"sentiment": result.sentiment, "rating": result.rating}
+        prompt = f"""Analyze the sentiment of this comment and return JSON with:
+- sentiment: exactly 'positive', 'negative', or 'neutral'
+- rating: integer 1-5 (5=very positive, 1=very negative, 3=neutral)
+
+Comment: {body.comment}"""
+        
+        response = model.generate_content(prompt)
+        result = json.loads(response.text)
+        return {"sentiment": result["sentiment"], "rating": result["rating"]}
     except Exception as e:
         return {"sentiment": "neutral", "rating": 3}
