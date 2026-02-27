@@ -32,16 +32,29 @@ def analyze_comment(body: Comment):
             generation_config=genai.types.GenerationConfig(
                 response_mime_type="application/json",
                 response_schema=SentimentResponse,
+                temperature=0.1,
             )
         )
-        prompt = f"""Analyze the sentiment of this comment and return JSON with:
-- sentiment: exactly 'positive', 'negative', or 'neutral'
-- rating: integer 1-5 (5=very positive, 1=very negative, 3=neutral)
+        prompt = f"""You are a sentiment analysis expert. Analyze the sentiment of the following comment and classify it.
 
-Comment: {body.comment}"""
-        
+Rules:
+- sentiment must be EXACTLY one of: 'positive', 'negative', or 'neutral'
+- 'positive': comment expresses satisfaction, happiness, praise, or excitement
+- 'negative': comment expresses dissatisfaction, disappointment, criticism, or anger
+- 'neutral': comment is neither clearly positive nor negative
+- rating is an integer from 1 to 5:
+  * 5 = very positive (enthusiastic praise)
+  * 4 = positive (satisfied/pleased)
+  * 3 = neutral (neither good nor bad)
+  * 2 = negative (disappointed/dissatisfied)
+  * 1 = very negative (angry/strongly critical)
+
+Comment: {body.comment}
+
+Return JSON with 'sentiment' and 'rating' keys."""
+
         response = model.generate_content(prompt)
         result = json.loads(response.text)
         return {"sentiment": result["sentiment"], "rating": result["rating"]}
     except Exception as e:
-        return {"sentiment": "neutral", "rating": 3}
+        return {"error": str(e)}
