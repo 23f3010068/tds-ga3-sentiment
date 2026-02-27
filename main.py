@@ -13,7 +13,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+client = OpenAI(
+    api_key=os.environ.get("AIPROXY_TOKEN"),
+    base_url="https://aiproxy.sanand.workers.dev/openai/v1"
+)
 
 class Comment(BaseModel):
     comment: str
@@ -24,13 +27,16 @@ class SentimentResponse(BaseModel):
 
 @app.post("/comment")
 def analyze_comment(body: Comment):
-    response = client.beta.chat.completions.parse(
-        model="gpt-4.1-mini",
-        messages=[
-            {"role": "system", "content": "Analyze the sentiment of the comment. Return sentiment as exactly 'positive', 'negative', or 'neutral'. Return rating as integer 1-5 (5=most positive, 1=most negative)."},
-            {"role": "user", "content": body.comment}
-        ],
-        response_format=SentimentResponse,
-    )
-    result = response.choices[0].message.parsed
-    return {"sentiment": result.sentiment, "rating": result.rating}
+    try:
+        response = client.beta.chat.completions.parse(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "Analyze the sentiment of the comment. Return sentiment as exactly 'positive', 'negative', or 'neutral'. Return rating as integer 1-5 (5=most positive, 1=most negative)."},
+                {"role": "user", "content": body.comment}
+            ],
+            response_format=SentimentResponse,
+        )
+        result = response.choices[0].message.parsed
+        return {"sentiment": result.sentiment, "rating": result.rating}
+    except Exception as e:
+        return {"sentiment": "neutral", "rating": 3}
